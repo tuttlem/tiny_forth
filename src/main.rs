@@ -6,6 +6,14 @@ enum Instruction {
     Dup,
     Drop,
     Swap,
+    Over,
+    Rot,
+    Nip,
+    Tuck,
+    TwoDup,   // 2DUP
+    TwoDrop,  // 2DROP
+    TwoSwap,  // 2SWAP
+    Depth,
     Halt,
 }
 
@@ -54,20 +62,93 @@ impl VM {
                     self.stack.push(b);
                     self.stack.push(a);
                 }
+                Instruction::Over => {
+                    if self.stack.len() < 2 {
+                        panic!("Stack underflow on OVER");
+                    }
+                    let val = self.stack[self.stack.len() - 2];
+                    self.stack.push(val);
+                }
+                Instruction::Rot => {
+                    if self.stack.len() < 3 {
+                        panic!("Stack underflow on ROT");
+                    }
+                    let c = self.stack.pop().unwrap();
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(b);
+                    self.stack.push(c);
+                    self.stack.push(a);
+                }
+                Instruction::Nip => {
+                    if self.stack.len() < 2 {
+                        panic!("Stack underflow on NIP");
+                    }
+                    let top = self.stack.pop().unwrap();
+                    self.stack.pop(); // discard second
+                    self.stack.push(top);
+                }
+                Instruction::Tuck => {
+                    if self.stack.len() < 2 {
+                        panic!("Stack underflow on TUCK");
+                    }
+                    let top = *self.stack.last().unwrap();
+                    let second = self.stack[self.stack.len() - 2];
+                    self.stack.insert(self.stack.len() - 2, top);
+                }
+                Instruction::TwoDup => {
+                    if self.stack.len() < 2 {
+                        panic!("Stack underflow on 2DUP");
+                    }
+                    let len = self.stack.len();
+                    self.stack.push(self.stack[len - 2]);
+                    self.stack.push(self.stack[len - 1]);
+                }
+                Instruction::TwoDrop => {
+                    if self.stack.len() < 2 {
+                        panic!("Stack underflow on 2DROP");
+                    }
+                    self.stack.pop();
+                    self.stack.pop();
+                }
+                Instruction::TwoSwap => {
+                    if self.stack.len() < 4 {
+                        panic!("Stack underflow on 2SWAP");
+                    }
+                    let d = self.stack.pop().unwrap();
+                    let c = self.stack.pop().unwrap();
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(c);
+                    self.stack.push(d);
+                    self.stack.push(a);
+                    self.stack.push(b);
+                }
+                Instruction::Depth => {
+                    let depth = self.stack.len() as i32;
+                    self.stack.push(depth);
+                }
                 Instruction::Halt => break,
             }
+
             self.ip += 1;
         }
     }
+
 }
 
 fn main() {
     let program = vec![
+        Instruction::Push(1),
         Instruction::Push(2),
         Instruction::Push(3),
-        Instruction::Add,
-        Instruction::Push(4),
-        Instruction::Mul,
+        Instruction::Rot,      // Stack: [2, 3, 1]
+        Instruction::Over,     // Stack: [2, 3, 1, 3]
+        Instruction::Add,      // Stack: [2, 3, 4]
+        Instruction::TwoDup,   // Stack: [2, 3, 4, 3, 4]
+        Instruction::Swap,     // Stack: [2, 3, 4, 4, 3]
+        Instruction::TwoDrop,  // Stack: [2, 3, 4]
+        Instruction::Depth,    // Stack: [2, 3, 4, 3]
         Instruction::Halt,
     ];
 
