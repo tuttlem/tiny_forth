@@ -181,21 +181,91 @@ impl VM {
 
 }
 
+struct Parser {
+    main: Vec<Instruction>,
+    definitions: Vec<Instruction>,
+    dictionary: HashMap<String, usize>,
+}
+
+impl Parser {
+    fn new() -> Self {
+        Self {
+            main: Vec::new(),
+            definitions: Vec::new(),
+            dictionary: HashMap::new(),
+        }
+    }
+
+    fn parse(&mut self, input: &str) {
+        let mut tokens = input.split_whitespace().peekable();
+        let mut defining: Option<String> = None;
+        let mut buffer: Vec<Instruction> = Vec::new();
+
+        while let Some(token) = tokens.next() {
+            match token {
+                ":" => {
+                    let name = tokens.next().expect("Expected word name after ':'");
+                    defining = Some(name.to_string());
+                    buffer.clear();
+                }
+                ";" => {
+                    if let Some(name) = defining.take() {
+                        buffer.push(Instruction::Return);
+                        let addr = self.main.len() + self.definitions.len() + 1; // +1 for future HALT
+                        self.dictionary.insert(name, addr);
+                        self.definitions.extend(buffer.drain(..));
+                    } else {
+                        panic!("Unexpected ';' outside of word definition");
+                    }
+                }
+                word => {
+                    let instr = if let Ok(n) = word.parse::<i32>() {
+                        Instruction::Push(n)
+                    } else {
+                        match word {
+                            "dup" => Instruction::Dup,
+                            "drop" => Instruction::Drop,
+                            "swap" => Instruction::Swap,
+                            "over" => Instruction::Over,
+                            "+" => Instruction::Add,
+                            "*" => Instruction::Mul,
+                            "depth" => Instruction::Depth,
+                            _ => Instruction::CallWord(word.to_string()),
+                        }
+                    };
+
+                    if defining.is_some() {
+                        buffer.push(instr);
+                    } else {
+                        self.main.push(instr);
+                    }
+                }
+            }
+        }
+    }
+
+    fn finalize(self) -> (Vec<Instruction>, HashMap<String, usize>) {
+        let mut instructions = self.main;
+        instructions.push(Instruction::Halt); // ✅ main program ends here
+        instructions.extend(self.definitions);
+        (instructions, self.dictionary)
+    }
+}
+
+
 fn main() {
-    let program = vec![
-        Instruction::Push(5),
-        Instruction::CallWord("square".to_string()),
-        Instruction::Halt,
+    let mut parser = Parser::new();
+    parser.parse("5 square : square dup * ;");
 
-        // : square dup * ;
-        Instruction::Dup,
-        Instruction::Mul,
-        Instruction::Return,
-    ];
+    let (instructions, dictionary) = parser.finalize();
 
-    let mut vm = VM::new(program);
-    vm.add_word("square", 3);
+    for instr in &instructions {
+        println!("{:?}", instr);
+    }
+
+    let mut vm = VM::new(instructions);
+    vm.dictionary = dictionary;
     vm.run();
 
-    println!("Final stack: {:?}", vm.stack); // Should be [20]
+    println!("Final stack: {:?}", vm.stack); // Should be [25]
 }
