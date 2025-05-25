@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[derive(Debug)]
 enum Instruction {
     Push(i32),
@@ -17,6 +19,7 @@ enum Instruction {
     Jump(isize),
     IfZero(isize),
     Call(usize),
+    CallWord(String),
     Return,
     Halt,
 }
@@ -27,6 +30,7 @@ struct VM {
     program: Vec<Instruction>,
     ip: usize,
     return_stack: Vec<usize>,
+    dictionary: HashMap<String, usize>,
 }
 
 impl VM {
@@ -36,7 +40,12 @@ impl VM {
             program,
             ip: 0,
             return_stack: Vec::new(),
+            dictionary: HashMap::new(),
         }
+    }
+
+    fn add_word(&mut self, name: &str, address: usize) {
+        self.dictionary.insert(name.to_string(), address);
     }
 
     fn run(&mut self) {
@@ -139,6 +148,13 @@ impl VM {
                     self.ip = *addr;
                     continue;
                 }
+                Instruction::CallWord(name) => {
+                    let addr = self.dictionary.get(name)
+                        .expect(&format!("Unknown word: {}", name));
+                    self.return_stack.push(self.ip + 1);
+                    self.ip = *addr;
+                    continue;
+                }
                 Instruction::Return => {
                     let ret = self.return_stack.pop().expect("Return stack underflow");
                     self.ip = ret;
@@ -167,18 +183,18 @@ impl VM {
 
 fn main() {
     let program = vec![
-        // main
-        Instruction::Push(5),       // [5]
-        Instruction::Call(3),       // jump to square
+        Instruction::Push(5),
+        Instruction::CallWord("square".to_string()),
         Instruction::Halt,
 
-        // square (addr 5)
-        Instruction::Dup,           // [5, 5]
-        Instruction::Mul,           // [25]
+        // : square dup * ;
+        Instruction::Dup,
+        Instruction::Mul,
         Instruction::Return,
     ];
 
     let mut vm = VM::new(program);
+    vm.add_word("square", 3);
     vm.run();
 
     println!("Final stack: {:?}", vm.stack); // Should be [20]
