@@ -10,10 +10,14 @@ enum Instruction {
     Rot,
     Nip,
     Tuck,
-    TwoDup,   // 2DUP
-    TwoDrop,  // 2DROP
-    TwoSwap,  // 2SWAP
+    TwoDup,
+    TwoDrop,
+    TwoSwap,
     Depth,
+    Jump(isize),
+    IfZero(isize),
+    Call(usize),
+    Return,
     Halt,
 }
 
@@ -21,7 +25,8 @@ enum Instruction {
 struct VM {
     stack: Vec<i32>,
     program: Vec<Instruction>,
-    ip: usize, // instruction pointer
+    ip: usize,
+    return_stack: Vec<usize>,
 }
 
 impl VM {
@@ -30,6 +35,7 @@ impl VM {
             stack: Vec::new(),
             program,
             ip: 0,
+            return_stack: Vec::new(),
         }
     }
 
@@ -128,8 +134,30 @@ impl VM {
                     let depth = self.stack.len() as i32;
                     self.stack.push(depth);
                 }
+                Instruction::Call(addr) => {
+                    self.return_stack.push(self.ip + 1);
+                    self.ip = *addr;
+                    continue;
+                }
+                Instruction::Return => {
+                    let ret = self.return_stack.pop().expect("Return stack underflow");
+                    self.ip = ret;
+                    continue;
+                }
+                Instruction::IfZero(offset) => {
+                    let cond = self.stack.pop().expect("Stack underflow on IFZERO");
+                    if cond == 0 {
+                        self.ip = ((self.ip as isize) + offset) as usize;
+                        continue; // skip ip += 1
+                    }
+                }
+                Instruction::Jump(offset) => {
+                    self.ip = ((self.ip as isize) + offset) as usize;
+                    continue;
+                }
                 Instruction::Halt => break,
             }
+
 
             self.ip += 1;
         }
@@ -139,17 +167,15 @@ impl VM {
 
 fn main() {
     let program = vec![
-        Instruction::Push(1),
-        Instruction::Push(2),
-        Instruction::Push(3),
-        Instruction::Rot,      // Stack: [2, 3, 1]
-        Instruction::Over,     // Stack: [2, 3, 1, 3]
-        Instruction::Add,      // Stack: [2, 3, 4]
-        Instruction::TwoDup,   // Stack: [2, 3, 4, 3, 4]
-        Instruction::Swap,     // Stack: [2, 3, 4, 4, 3]
-        Instruction::TwoDrop,  // Stack: [2, 3, 4]
-        Instruction::Depth,    // Stack: [2, 3, 4, 3]
+        // main
+        Instruction::Push(5),       // [5]
+        Instruction::Call(3),       // jump to square
         Instruction::Halt,
+
+        // square (addr 5)
+        Instruction::Dup,           // [5, 5]
+        Instruction::Mul,           // [25]
+        Instruction::Return,
     ];
 
     let mut vm = VM::new(program);
